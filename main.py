@@ -11,7 +11,7 @@ from storage import upload_audio
 
 
 app = FastAPI(
-    title="Wakhin Wolof API",
+    title="Waxeen Wolof API",
     version="6.0.0"
 )
 
@@ -37,7 +37,7 @@ app.add_middleware(
 def root():
     return {
         "status": "ok",
-        "service": "Wakhin Wolof API",
+        "service": "Waxeen Wolof API",
         "version": "6.0.0"
     }
 
@@ -46,7 +46,7 @@ def root():
 def health():
     return {
         "status": "healthy",
-        "service": "wakhin-wolof-api",
+        "service": "waxeen-wolof-api",
         "database": "Supabase",
         "storage": "Supabase Storage"
     }
