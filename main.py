@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
 from database import create_contribution, list_all_contributions
-from storage import upload_audio
+from storage import upload_audio, audio_exists
 
 
 app = FastAPI(
@@ -65,14 +65,20 @@ async def contribuer(
     audioFile: UploadFile = File(...)
 ):
 
+    # =====================================================
     # Vérification de l'âge
+    # =====================================================
+
     if age < 1 or age > 120:
         raise HTTPException(
             status_code=400,
             detail="L'age doit etre compris entre 1 et 120."
         )
 
+    # =====================================================
     # Vérification de la transcription
+    # =====================================================
+
     transcription = transcription.strip()
 
     if not transcription:
@@ -81,7 +87,10 @@ async def contribuer(
             detail="La transcription est obligatoire."
         )
 
+    # =====================================================
     # Vérification des autres champs
+    # =====================================================
+
     fields = {
         "sexe": sexe,
         "region": region,
@@ -92,13 +101,17 @@ async def contribuer(
     }
 
     for field, value in fields.items():
+
         if not value or not value.strip():
             raise HTTPException(
                 status_code=400,
                 detail=f"Le champ {field} est obligatoire."
             )
 
+    # =====================================================
     # Lecture du fichier audio
+    # =====================================================
+
     content = await audioFile.read()
 
     if not content:
@@ -108,10 +121,18 @@ async def contribuer(
         )
 
     filename = audioFile.filename or "audio.wav"
-    content_type = audioFile.content_type or "audio/wav"
 
-    # Upload audio
+    content_type = (
+        audioFile.content_type
+        or "audio/wav"
+    )
+
+    # =====================================================
+    # Upload audio vers Supabase Storage
+    # =====================================================
+
     try:
+
         audio_path = upload_audio(
             content,
             filename,
@@ -119,13 +140,18 @@ async def contribuer(
         )
 
     except Exception as e:
+
         raise HTTPException(
             status_code=500,
             detail=f"Erreur Supabase Storage : {str(e)}"
         )
 
-    # Enregistrement en base PostgreSQL
+    # =====================================================
+    # Enregistrement dans Render PostgreSQL
+    # =====================================================
+
     try:
+
         row = create_contribution(
             age=age,
             sexe=sexe,
@@ -141,10 +167,15 @@ async def contribuer(
         )
 
     except Exception as e:
+
         raise HTTPException(
             status_code=500,
             detail=f"Erreur PostgreSQL : {str(e)}"
         )
+
+    # =====================================================
+    # Réponse
+    # =====================================================
 
     return {
         "success": True,
@@ -159,7 +190,10 @@ def contributions_csv(
     x_admin_token: str = Header(default="")
 ):
 
+    # =====================================================
     # Vérification du token administrateur
+    # =====================================================
+
     if not ADMIN_TOKEN:
         raise HTTPException(
             status_code=500,
@@ -172,17 +206,25 @@ def contributions_csv(
             detail="Code administrateur incorrect."
         )
 
-    # Récupération des contributions
+    # =====================================================
+    # Récupération des contributions PostgreSQL
+    # =====================================================
+
     try:
+
         rows = list_all_contributions()
 
     except Exception as e:
+
         raise HTTPException(
             status_code=500,
             detail=f"Erreur recuperation donnees : {str(e)}"
         )
 
+    # =====================================================
     # Colonnes du CSV
+    # =====================================================
+
     fields = [
         "id",
         "age",
@@ -199,7 +241,10 @@ def contributions_csv(
         "created_at"
     ]
 
+    # =====================================================
     # Création du CSV
+    # =====================================================
+
     output = io.StringIO()
 
     writer = csv.DictWriter(
@@ -210,16 +255,61 @@ def contributions_csv(
 
     writer.writeheader()
 
+    # Compteurs
+    audio_count = 0
+    missing_audio_count = 0
+
+    # =====================================================
+    # Vérification de chaque audio dans Supabase Storage
+    # =====================================================
+
     for row in rows:
+
+        audio_path = row.get("audio_path")
+
+        # Aucun chemin audio enregistré
+        if not audio_path:
+
+            missing_audio_count += 1
+
+            continue
+
+        # Vérification réelle dans Supabase Storage
+        try:
+
+            exists = audio_exists(audio_path)
+
+        except Exception:
+
+            exists = False
+
+        # Audio absent de Supabase
+        if not exists:
+
+            missing_audio_count += 1
+
+            continue
+
+        # =================================================
+        # Audio réellement présent dans Supabase
+        # =================================================
+
         writer.writerow({
             field: row.get(field, "")
             for field in fields
         })
 
+        audio_count += 1
+
+    # =====================================================
     # UTF-8 avec BOM
-    # Permet à Excel de reconnaître correctement
-    # les caractères Wolof et accentués.
+    # =====================================================
+
     csv_content = "\ufeff" + output.getvalue()
+
+    # =====================================================
+    # Téléchargement du CSV
+    # =====================================================
 
     return Response(
         content=csv_content,
@@ -227,7 +317,9 @@ def contributions_csv(
         headers={
             "Content-Disposition": (
                 "attachment; "
-                "filename=corpus_waxeen_wolof.csv"
-            )
+                "filename=corpus_waxeen_wolof_audio.csv"
+            ),
+            "X-Audio-Count": str(audio_count),
+            "X-Missing-Audio": str(missing_audio_count)
         }
     )
