@@ -47,7 +47,7 @@ def health():
     return {
         "status": "healthy",
         "service": "waxeen-wolof-api",
-        "database": "Supabase",
+        "database": "Render PostgreSQL",
         "storage": "Supabase Storage"
     }
 
@@ -65,12 +65,23 @@ async def contribuer(
     audioFile: UploadFile = File(...)
 ):
 
+    # Vérification de l'âge
     if age < 1 or age > 120:
         raise HTTPException(
             status_code=400,
             detail="L'age doit etre compris entre 1 et 120."
         )
 
+    # Vérification de la transcription
+    transcription = transcription.strip()
+
+    if not transcription:
+        raise HTTPException(
+            status_code=400,
+            detail="La transcription est obligatoire."
+        )
+
+    # Vérification des autres champs
     fields = {
         "sexe": sexe,
         "region": region,
@@ -87,6 +98,7 @@ async def contribuer(
                 detail=f"Le champ {field} est obligatoire."
             )
 
+    # Lecture du fichier audio
     content = await audioFile.read()
 
     if not content:
@@ -98,6 +110,7 @@ async def contribuer(
     filename = audioFile.filename or "audio.wav"
     content_type = audioFile.content_type or "audio/wav"
 
+    # Upload audio
     try:
         audio_path = upload_audio(
             content,
@@ -111,6 +124,7 @@ async def contribuer(
             detail=f"Erreur Supabase Storage : {str(e)}"
         )
 
+    # Enregistrement en base PostgreSQL
     try:
         row = create_contribution(
             age=age,
@@ -129,7 +143,7 @@ async def contribuer(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Erreur Supabase Database : {str(e)}"
+            detail=f"Erreur PostgreSQL : {str(e)}"
         )
 
     return {
@@ -145,6 +159,7 @@ def contributions_csv(
     x_admin_token: str = Header(default="")
 ):
 
+    # Vérification du token administrateur
     if not ADMIN_TOKEN:
         raise HTTPException(
             status_code=500,
@@ -157,6 +172,7 @@ def contributions_csv(
             detail="Code administrateur incorrect."
         )
 
+    # Récupération des contributions
     try:
         rows = list_all_contributions()
 
@@ -166,6 +182,7 @@ def contributions_csv(
             detail=f"Erreur recuperation donnees : {str(e)}"
         )
 
+    # Colonnes du CSV
     fields = [
         "id",
         "age",
@@ -202,6 +219,6 @@ def contributions_csv(
         content=output.getvalue(),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": "attachment; filename=corpus_wakhin_wolof.csv"
+            "Content-Disposition": "attachment; filename=corpus_waxeen_wolof.csv"
         }
     )
