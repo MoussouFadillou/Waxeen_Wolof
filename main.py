@@ -199,6 +199,7 @@ def contributions_csv(
         "created_at"
     ]
 
+    # Création du CSV
     output = io.StringIO()
 
     writer = csv.DictWriter(
@@ -215,10 +216,18 @@ def contributions_csv(
             for field in fields
         })
 
+    # UTF-8 avec BOM
+    # Permet à Excel de reconnaître correctement
+    # les caractères Wolof et accentués.
+    csv_content = "\ufeff" + output.getvalue()
+
     return Response(
-        content=output.getvalue(),
+        content=csv_content,
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": "attachment; filename=corpus_waxeen_wolof.csv"
+            "Content-Disposition": (
+                "attachment; "
+                "filename=corpus_waxeen_wolof.csv"
+            )
         }
     )
