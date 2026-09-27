@@ -58,3 +58,46 @@ def upload_audio(
         )
 
     return path
+
+
+def audio_exists(audio_path: str) -> bool:
+    """
+    Vérifie que le fichier audio existe réellement
+    dans Supabase Storage.
+    """
+
+    if not audio_path:
+        return False
+
+    try:
+        # Exemple :
+        # contributions/abc123.webm
+
+        if "/" not in audio_path:
+            return False
+
+        folder, filename = audio_path.rsplit("/", 1)
+
+        response = (
+            supabase.storage
+            .from_(BUCKET)
+            .list(
+                folder,
+                {
+                    "limit": 100,
+                    "search": filename
+                }
+            )
+        )
+
+        if not response:
+            return False
+
+        for item in response:
+            if item.get("name") == filename:
+                return True
+
+        return False
+
+    except Exception:
+        return False
